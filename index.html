@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Popup Dictionary</title>
+<style>
+  :root{
+    --primary:#4A6FA5;
+    --primary-dark:#33507A;
+    --accent:#F2A65A;
+    --text-dark:#222;
+    --text-muted:#666;
+    --syn:#2E7D32;
+    --ant:#C62828;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--primary);
+    color:#fff;
+    min-height:100vh;
+  }
+  header{
+    padding:24px 20px 12px;
+  }
+  header h1{margin:0 0 4px;font-size:24px;}
+  header p{margin:0;color:#dbe4f2;font-size:14px;line-height:1.5;}
+  .card-outer{
+    background:#fff;
+    color:var(--text-dark);
+    margin:16px;
+    border-radius:16px;
+    padding:18px;
+    box-shadow:0 6px 18px rgba(0,0,0,.15);
+  }
+  .card-outer h2{font-size:16px;margin:0 0 8px;}
+  textarea{
+    width:100%;
+    min-height:130px;
+    border:1px solid #ccc;
+    border-radius:10px;
+    padding:12px;
+    font-size:16px;
+    resize:vertical;
+    -webkit-user-select:text;
+    user-select:text;
+  }
+  .hint{
+    font-size:12.5px;
+    color:var(--text-muted);
+    margin-top:8px;
+    line-height:1.5;
+  }
+
+  /* Floating select-button that appears near a selected word */
+  #selectBtn{
+    position:fixed;
+    z-index:50;
+    display:none;
+    width:44px;height:44px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    font-size:20px;
+    box-shadow:0 4px 10px rgba(0,0,0,.35);
+    align-items:center;
+    justify-content:center;
+  }
+
+  /* Backdrop + popup dictionary card */
+  #backdrop{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+    padding:20px;
+  }
+  #popup{
+    background:#fff;
+    color:var(--text-dark);
+    width:100%;
+    max-width:420px;
+    max-height:80vh;
+    overflow-y:auto;
+    border-radius:18px;
+    padding:20px;
+  }
+  #popup .row{display:flex;align-items:center;gap:8px;}
+  #wordTitle{font-size:22px;font-weight:700;flex:1;}
+  #speakBtn{
+    background:none;border:none;font-size:22px;cursor:pointer;
+    color:var(--primary);
+  }
+  #phonetic{color:var(--text-muted);font-size:14px;margin-top:2px;}
+  #pos{color:var(--primary);font-style:italic;font-size:14px;margin-top:8px;}
+  #meaningEn{font-size:16px;margin-top:6px;line-height:1.5;}
+  #hiLabel{color:var(--primary);font-weight:700;font-size:13px;margin-top:14px;}
+  #meaningHi{font-size:16px;margin-top:2px;line-height:1.5;}
+  .synLabel{color:var(--syn);font-weight:700;font-size:13px;margin-top:14px;}
+  #synonyms{color:var(--syn);font-size:14px;}
+  .antLabel{color:var(--ant);font-weight:700;font-size:13px;margin-top:10px;}
+  #antonyms{color:var(--ant);font-size:14px;}
+  #loading{text-align:center;padding:20px;color:var(--text-muted);}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📖 My Popup Dictionary</h1>
+  <p>Type or paste any text below, then select (long-press) a word inside it.
+  A small orange button will appear — tap it to see the meaning. Tap
+  outside the popup to close it.</p>
+</header>
+
+<div class="card-outer">
+  <h2>Your text</h2>
+  <textarea id="sourceText" placeholder="Paste or type any paragraph here, then select a word from it...">Serendipity is the occurrence of events by chance in a happy or beneficial way. Many great discoveries in science happened through pure serendipity.</textarea>
+  <div class="hint">Tip: on most phones, tap and hold a word until it highlights, then release — the round button will appear near it.</div>
+</div>
+
+<!-- Floating button shown near selected text -->
+<button id="selectBtn">🔍</button>
+
+<!-- Popup dictionary card -->
+<div id="backdrop">
+  <div id="popup">
+    <div class="row">
+      <div id="wordTitle">Word</div>
+      <button id="speakBtn" title="Pronounce">🔊</button>
+    </div>
+    <div id="phonetic"></div>
+    <div id="pos"></div>
+    <div id="meaningEn"></div>
+
+    <div id="hiLabel" class="hidden">हिंदी (Hindi)</div>
+    <div id="meaningHi"></div>
+
+    <div id="synLabel" class="synLabel hidden">Synonyms</div>
+    <div id="synonyms"></div>
+
+    <div id="antLabel" class="antLabel hidden">Antonyms</div>
+    <div id="antonyms"></div>
+
+    <div id="loading" class="hidden">Fetching meaning…</div>
+  </div>
+</div>
+
+<script>
+const selectBtn = document.getElementById('selectBtn');
+const backdrop = document.getElementById('backdrop');
+const popup = document.getElementById('popup');
+const wordTitle = document.getElementById('wordTitle');
+const phoneticEl = document.getElementById('phonetic');
+const posEl = document.getElementById('pos');
+const meaningEnEl = document.getElementById('meaningEn');
+const hiLabel = document.getElementById('hiLabel');
+const meaningHiEl = document.getElementById('meaningHi');
+const synLabel = document.getElementById('synLabel');
+const synonymsEl = document.getElementById('synonyms');
+const antLabel = document.getElementById('antLabel');
+const antonymsEl = document.getElementById('antonyms');
+const loadingEl = document.getElementById('loading');
+const speakBtn = document.getElementById('speakBtn');
+
+let currentWord = '';
+
+// Show the round button near wherever the user's selection is
+document.addEventListener('selectionchange', () => {
+  const sel = window.getSelection();
+  const text = sel.toString().trim();
+  if (!text || text.split(/\s+/).length > 3) {
+    selectBtn.style.display = 'none';
+    return;
+  }
+  try {
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      selectBtn.style.display = 'none';
+      return;
+    }
+    selectBtn.style.left = Math.max(8, rect.left + rect.width / 2 - 22) + 'px';
+    selectBtn.style.top = Math.max(8, rect.top - 54) + 'px';
+    selectBtn.style.display = 'flex';
+  } catch (e) {
+    selectBtn.style.display = 'none';
+  }
+});
+
+selectBtn.addEventListener('click', () => {
+  const sel = window.getSelection();
+  const text = sel.toString().trim().split(/\s+/)[0];
+  if (!text) return;
+  selectBtn.style.display = 'none';
+  openPopup(text);
+});
+
+// Close popup when tapping the dark backdrop (outside the white card)
+backdrop.addEventListener('click', (e) => {
+  if (e.target === backdrop) closePopup();
+});
+
+function closePopup() {
+  backdrop.style.display = 'none';
+}
+
+function resetPopupFields() {
+  phoneticEl.textContent = '';
+  posEl.textContent = '';
+  meaningEnEl.textContent = '';
+  meaningHiEl.textContent = '';
+  hiLabel.classList.add('hidden');
+  synLabel.classList.add('hidden');
+  synonymsEl.textContent = '';
+  antLabel.classList.add('hidden');
+  antonymsEl.textContent = '';
+}
+
+async function openPopup(word) {
+  currentWord = word.replace(/[^a-zA-Z'-]/g, '');
+  if (!currentWord) return;
+  wordTitle.textContent = currentWord;
+  resetPopupFields();
+  loadingEl.classList.remove('hidden');
+  backdrop.style.display = 'flex';
+
+  try {
+    const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(currentWord));
+    if (res.ok) {
+      const data = await res.json();
+      const entry = data[0];
+      let phonetic = entry.phonetic || '';
+      if (!phonetic && entry.phonetics) {
+        const found = entry.phonetics.find(p => p.text);
+        if (found) phonetic = found.text;
+      }
+      phoneticEl.textContent = phonetic;
+
+      let pos = '', meaning = '';
+      const synSet = new Set(), antSet = new Set();
+      if (entry.meanings && entry.meanings.length) {
+        pos = entry.meanings[0].partOfSpeech || '';
+        if (entry.meanings[0].definitions && entry.meanings[0].definitions.length) {
+          meaning = entry.meanings[0].definitions[0].definition || '';
+        }
+        entry.meanings.forEach(m => {
+          (m.synonyms || []).forEach(s => synSet.add(s));
+          (m.antonyms || []).forEach(a => antSet.add(a));
+          (m.definitions || []).forEach(d => {
+            (d.synonyms || []).forEach(s => synSet.add(s));
+            (d.antonyms || []).forEach(a => antSet.add(a));
+          });
+        });
+      }
+      posEl.textContent = pos;
+      meaningEnEl.textContent = meaning || 'No definition found.';
+
+      if (synSet.size) {
+        synLabel.classList.remove('hidden');
+        synonymsEl.textContent = [...synSet].slice(0, 8).join(', ');
+      }
+      if (antSet.size) {
+        antLabel.classList.remove('hidden');
+        antonymsEl.textContent = [...antSet].slice(0, 8).join(', ');
+      }
+    } else {
+      meaningEnEl.textContent = 'No dictionary entry found for this word.';
+    }
+  } catch (e) {
+    meaningEnEl.textContent = "Couldn't reach the dictionary. Check your internet connection.";
+  }
+
+  // Hindi translation (best-effort, separate call so English never blocks on it)
+  try {
+    const hiRes = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(currentWord) + '&langpair=en|hi');
+    if (hiRes.ok) {
+      const hiData = await hiRes.json();
+      const translated = hiData.responseData && hiData.responseData.translatedText;
+      if (translated) {
+        hiLabel.classList.remove('hidden');
+        meaningHiEl.textContent = translated;
+      }
+    }
+  } catch (e) { /* silently skip Hindi on failure */ }
+
+  loadingEl.classList.add('hidden');
+}
+
+speakBtn.addEventListener('click', () => {
+  if (!currentWord || !('speechSynthesis' in window)) return;
+  const utter = new SpeechSynthesisUtterance(currentWord);
+  utter.lang = 'en-US';
+  speechSynthesis.cancel();
+  speechSynthesis.speak(utter);
+});
+</script>
+
+</body>
+  </html>
