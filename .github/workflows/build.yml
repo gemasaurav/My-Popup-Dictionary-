@@ -11,11 +11,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unzip project source
+      - name: Unzip project source (handles nested zips too)
         run: |
           unzip -o files.zip -d extracted
-          echo "----- Extracted contents -----"
-          find extracted -maxdepth 4
+          # Keep unzipping any .zip files found inside, up to 5 passes deep
+          for i in 1 2 3 4 5; do
+            FOUND=$(find extracted -name "*.zip")
+            if [ -z "$FOUND" ]; then
+              break
+            fi
+            echo "$FOUND" | while read -r z; do
+              echo "Unzipping nested archive: $z"
+              unzip -o "$z" -d extracted
+              rm -f "$z"
+            done
+          done
+          echo "----- Final extracted contents -----"
+          find extracted -maxdepth 5
 
       - name: Locate project folder
         id: locate
